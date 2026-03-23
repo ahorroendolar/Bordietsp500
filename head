@@ -1,0 +1,291 @@
+//@version=6
+indicator("Bordiet — S&P 500 & Merval USD", overlay = true, max_labels_count = 500)
+
+// ─────────────────────────────────────────────────────────────────────────────
+// CICLOS DE BORDIET aplicados al S&P 500 y al MERVAL (en USD)
+// Basado en el análisis comparativo histórico 1924–2026
+//
+// Usá este indicador sobre:
+//   • SPX / SPY       → verás los ciclos del S&P 500
+//   • MERVAL / BYMA   → verás los ciclos del Merval USD
+//   • Cualquier otro activo como referencia temporal
+//
+// A = Pánico  (pico / crisis)        → considerar VENDER
+// B = Boom    (buenos tiempos)       → considerar VENDER
+// C = Piso    (tiempos difíciles)    → considerar COMPRAR
+// ─────────────────────────────────────────────────────────────────────────────
+
+
+// ── Inputs — Visibilidad ──────────────────────────────────────────────────────
+
+var G1 = "S&P 500 — Ciclos"
+sp_show_A   = input.bool(true, "S&P 500 · Pánico (A)",  group = G1)
+sp_show_B   = input.bool(true, "S&P 500 · Boom (B)",    group = G1)
+sp_show_C   = input.bool(true, "S&P 500 · Piso (C)",    group = G1)
+
+var G2 = "Merval USD — Ciclos"
+mv_show_A   = input.bool(true, "Merval · Pánico (A)",   group = G2)
+mv_show_B   = input.bool(true, "Merval · Boom (B)",     group = G2)
+mv_show_C   = input.bool(true, "Merval · Piso (C)",     group = G2)
+
+var G3 = "Opciones generales"
+show_future = input.bool(true,  "Mostrar proyecciones futuras (✦)", group = G3)
+show_lines  = input.bool(true,  "Mostrar líneas verticales",        group = G3)
+show_labels = input.bool(true,  "Mostrar etiquetas",                group = G3)
+show_bg     = input.bool(true,  "Mostrar fondo de color",           group = G3)
+lbl_size    = input.string("small", "Tamaño etiqueta",
+              options = ["tiny","small","normal","large"],           group = G3)
+lw          = input.int(1, "Grosor de línea", minval=1, maxval=4,   group = G3)
+
+var G4 = "Colores S&P 500"
+sp_col_A = input.color(color.new(#F97066, 0),  "S&P · Pánico (A)", group = G4)
+sp_col_B = input.color(color.new(#32D583, 0),  "S&P · Boom (B)",   group = G4)
+sp_col_C = input.color(color.new(#FDB022, 0),  "S&P · Piso (C)",   group = G4)
+
+var G5 = "Colores Merval"
+mv_col_A = input.color(color.new(#FF6B9D, 0),  "MV · Pánico (A)",  group = G5)
+mv_col_B = input.color(color.new(#00D4FF, 0),  "MV · Boom (B)",    group = G5)
+mv_col_C = input.color(color.new(#C084FC, 0),  "MV · Piso (C)",    group = G5)
+
+col_fut  = input.color(color.new(#AAAAAA, 50), "Color futuros",    group = G3)
+
+
+// ── Año de la barra ───────────────────────────────────────────────────────────
+
+int  bar_yr      = year(time, "UTC")
+bool first_of_yr = bar_yr != bar_yr[1]
+
+
+// ── S&P 500 — Ciclos históricos identificados ────────────────────────────────
+//
+// Fuente: S&P 500 annual prices (multpl.com) cruzado con modelo Bordiet
+//
+// A — Pánico / pico de crisis
+bool sp_A_hist = bar_yr == 1927 or  // Pre-crack del 29, máximo pre-Gran Depresión
+                 bar_yr == 1945 or  // Pico fin WWII
+                 bar_yr == 1965 or  // Pico bull market de los 60s
+                 bar_yr == 1981 or  // Pico / crisis deuda Reagan
+                 bar_yr == 1999 or  // Pico burbuja dot-com
+                 bar_yr == 2019     // Pánico pre-COVID
+
+// B — Boom / buenos tiempos
+bool sp_B_hist = bar_yr == 1926 or  // Boom de los roaring 20s
+                 bar_yr == 1935 or  // Recuperación post-depresión
+                 bar_yr == 1945 or  // Boom postguerra
+                 bar_yr == 1953 or  // Boom expansión postguerra
+                 bar_yr == 1962 or  // Boom temprano 60s
+                 bar_yr == 1972 or  // Boom Nixon / Nifty Fifty
+                 bar_yr == 1980 or  // Boom Reagan early
+                 bar_yr == 1989 or  // Boom late 80s pre-recesión
+                 bar_yr == 1999 or  // Dot-com boom
+                 bar_yr == 2007 or  // Boom pre-crisis 2008
+                 bar_yr == 2016 or  // Rally Trump
+                 bar_yr == 2026     // Rally IA / actual
+
+// C — Piso / tiempos difíciles
+bool sp_C_hist = bar_yr == 1924 or  // Piso pre-boom 20s
+                 bar_yr == 1931 or  // Fondo Gran Depresión
+                 bar_yr == 1942 or  // Mínimo WWII
+                 bar_yr == 1951 or  // Corrección guerra de Corea
+                 bar_yr == 1958 or  // Recesión 1957-58
+                 bar_yr == 1969 or  // Corrección 1969-70
+                 bar_yr == 1974 or  // Crisis del petróleo
+                 bar_yr == 1978 or  // Suelo stagflación
+                 bar_yr == 1985 or  // Suelo mid-80s
+                 bar_yr == 1996 or  // Pre burbuja dot-com
+                 bar_yr == 2005 or  // Pre crisis 2008
+                 bar_yr == 2009 or  // Fondo crisis financiera global
+                 bar_yr == 2012 or  // Recovery fondo Europa
+                 bar_yr == 2023     // Corrección post-COVID / piso reciente
+
+// Proyecciones S&P 500
+bool sp_A_fut = bar_yr == 2035 or bar_yr == 2053
+bool sp_B_fut = bar_yr == 2034 or bar_yr == 2043
+bool sp_C_fut = bar_yr == 2039 or bar_yr == 2050
+
+
+// ── MERVAL USD — Ciclos históricos identificados ──────────────────────────────
+//
+// Fuente: BCRA / CEIC — Merval expresado en USD (dólar oficial)
+// La enorme volatilidad del Merval amplifica los ciclos Bordiet
+//
+// A — Pánico / pico
+bool mv_A_hist = bar_yr == 1992 or  // Pico convertibilidad temprana
+                 bar_yr == 1997 or  // Pico pre-crisis rusa/LTCM/Brasil
+                 bar_yr == 1999 or  // Crisis Brasil / contagio
+                 bar_yr == 2007 or  // Pico pre-crisis global
+                 bar_yr == 2017 or  // Pico Macri / euforia reformista
+                 bar_yr == 2019 or  // Pánico PASO — caída 50% en un día
+                 bar_yr == 2024     // Pico rally Milei / máximo histórico USD
+
+// B — Boom / buenos tiempos
+bool mv_B_hist = bar_yr == 1991 or  // Boom inicio convertibilidad
+                 bar_yr == 1994 or  // Boom pre-Tequila
+                 bar_yr == 1996 or  // Recuperación post-Tequila
+                 bar_yr == 2006 or  // Boom commodities / Kirchner
+                 bar_yr == 2010 or  // Recuperación post-crisis global
+                 bar_yr == 2013 or  // Boom dólar blue / cepo
+                 bar_yr == 2017 or  // Boom Macri
+                 bar_yr == 2021 or  // Recuperación post-COVID
+                 bar_yr == 2024     // Rally Milei
+
+// C — Piso / tiempos difíciles
+bool mv_C_hist = bar_yr == 1990 or  // Hiperinflación / inicio convertibilidad
+                 bar_yr == 1995 or  // Efecto Tequila
+                 bar_yr == 1998 or  // Pre-default / crisis rusa
+                 bar_yr == 2002 or  // Default + devaluación — mínimo histórico USD
+                 bar_yr == 2008 or  // Crisis global
+                 bar_yr == 2009 or  // Fondo crisis global
+                 bar_yr == 2012 or  // Cepo / intervención
+                 bar_yr == 2016 or  // Transición Macri / corrección
+                 bar_yr == 2019 or  // PASO + controles de capital
+                 bar_yr == 2020 or  // COVID crash
+                 bar_yr == 2022 or  // Crisis cambiaria / brecha 200%
+                 bar_yr == 2023     // Pre-elecciones / incertidumbre máxima
+
+// Proyecciones Merval
+bool mv_A_fut = bar_yr == 2028 or bar_yr == 2035
+bool mv_B_fut = bar_yr == 2027 or bar_yr == 2034
+bool mv_C_fut = bar_yr == 2030 or bar_yr == 2039
+
+
+// ── Combinados ────────────────────────────────────────────────────────────────
+
+bool sp_A = sp_A_hist or (show_future and sp_A_fut)
+bool sp_B = sp_B_hist or (show_future and sp_B_fut)
+bool sp_C = sp_C_hist or (show_future and sp_C_fut)
+
+bool mv_A = mv_A_hist or (show_future and mv_A_fut)
+bool mv_B = mv_B_hist or (show_future and mv_B_fut)
+bool mv_C = mv_C_hist or (show_future and mv_C_fut)
+
+bool is_sp_fut = sp_A_fut or sp_B_fut or sp_C_fut
+bool is_mv_fut = mv_A_fut or mv_B_fut or mv_C_fut
+
+
+// ── Tamaño de etiqueta ────────────────────────────────────────────────────────
+
+string sz = switch lbl_size
+    "tiny"   => size.tiny
+    "small"  => size.small
+    "normal" => size.normal
+    "large"  => size.large
+    =>          size.small
+
+
+// ── Fondo de color — scope global (requerido en v6) ───────────────────────────
+// Prioridad: S&P Pánico > S&P Boom > S&P Piso > MV Pánico > MV Boom > MV Piso
+
+color bg_col =
+     sp_show_A and sp_A ? color.new(is_sp_fut ? col_fut : sp_col_A, 91) :
+     sp_show_B and sp_B ? color.new(is_sp_fut ? col_fut : sp_col_B, 91) :
+     sp_show_C and sp_C ? color.new(is_sp_fut ? col_fut : sp_col_C, 91) :
+     mv_show_A and mv_A ? color.new(is_mv_fut ? col_fut : mv_col_A, 91) :
+     mv_show_B and mv_B ? color.new(is_mv_fut ? col_fut : mv_col_B, 91) :
+     mv_show_C and mv_C ? color.new(is_mv_fut ? col_fut : mv_col_C, 91) :
+     na
+
+bgcolor(show_bg ? bg_col : na, title = "Fondo ciclos Bordiet")
+
+
+// ── Dibujo de líneas y etiquetas ──────────────────────────────────────────────
+
+if first_of_yr
+
+    // ── S&P 500 ──────────────────────────────────────────────────────────────
+
+    if sp_show_A and sp_A
+        color c = is_sp_fut ? col_fut : sp_col_A
+        string t = (is_sp_fut ? "SP·A " : "SP·A ") + str.tostring(bar_yr) + (is_sp_fut ? " ✦" : "")
+        if show_lines
+            line.new(bar_index, low * 0.80, bar_index, high * 1.20,
+                     color = color.new(c, 40), width = lw,
+                     style = is_sp_fut ? line.style_dashed : line.style_solid,
+                     extend = extend.both)
+        if show_labels
+            label.new(bar_index, high, text = t,
+                      color = color.new(c, 78), textcolor = c,
+                      style = label.style_label_down, size = sz)
+
+    if sp_show_B and sp_B
+        color c = is_sp_fut ? col_fut : sp_col_B
+        string t = "SP·B " + str.tostring(bar_yr) + (is_sp_fut ? " ✦" : "")
+        if show_lines
+            line.new(bar_index, low * 0.80, bar_index, high * 1.20,
+                     color = color.new(c, 40), width = lw,
+                     style = is_sp_fut ? line.style_dashed : line.style_solid,
+                     extend = extend.both)
+        if show_labels
+            label.new(bar_index, high, text = t,
+                      color = color.new(c, 78), textcolor = c,
+                      style = label.style_label_down, size = sz)
+
+    if sp_show_C and sp_C
+        color c = is_sp_fut ? col_fut : sp_col_C
+        string t = "SP·C " + str.tostring(bar_yr) + (is_sp_fut ? " ✦" : "")
+        if show_lines
+            line.new(bar_index, low * 0.80, bar_index, high * 1.20,
+                     color = color.new(c, 40), width = lw,
+                     style = is_sp_fut ? line.style_dashed : line.style_solid,
+                     extend = extend.both)
+        if show_labels
+            label.new(bar_index, low, text = t,
+                      color = color.new(c, 78), textcolor = c,
+                      style = label.style_label_up, size = sz)
+
+    // ── MERVAL ───────────────────────────────────────────────────────────────
+
+    if mv_show_A and mv_A
+        color c = is_mv_fut ? col_fut : mv_col_A
+        string t = "MV·A " + str.tostring(bar_yr) + (is_mv_fut ? " ✦" : "")
+        if show_lines
+            line.new(bar_index, low * 0.80, bar_index, high * 1.20,
+                     color = color.new(c, 40), width = lw,
+                     style = is_mv_fut ? line.style_dashed : line.style_solid,
+                     extend = extend.both)
+        if show_labels
+            label.new(bar_index, high, text = t,
+                      color = color.new(c, 78), textcolor = c,
+                      style = label.style_label_down, size = sz)
+
+    if mv_show_B and mv_B
+        color c = is_mv_fut ? col_fut : mv_col_B
+        string t = "MV·B " + str.tostring(bar_yr) + (is_mv_fut ? " ✦" : "")
+        if show_lines
+            line.new(bar_index, low * 0.80, bar_index, high * 1.20,
+                     color = color.new(c, 40), width = lw,
+                     style = is_mv_fut ? line.style_dashed : line.style_solid,
+                     extend = extend.both)
+        if show_labels
+            label.new(bar_index, high, text = t,
+                      color = color.new(c, 78), textcolor = c,
+                      style = label.style_label_down, size = sz)
+
+    if mv_show_C and mv_C
+        color c = is_mv_fut ? col_fut : mv_col_C
+        string t = "MV·C " + str.tostring(bar_yr) + (is_mv_fut ? " ✦" : "")
+        if show_lines
+            line.new(bar_index, low * 0.80, bar_index, high * 1.20,
+                     color = color.new(c, 40), width = lw,
+                     style = is_mv_fut ? line.style_dashed : line.style_solid,
+                     extend = extend.both)
+        if show_labels
+            label.new(bar_index, low, text = t,
+                      color = color.new(c, 78), textcolor = c,
+                      style = label.style_label_up, size = sz)
+
+
+// ── Alertas ───────────────────────────────────────────────────────────────────
+
+alertcondition(first_of_yr and sp_A, "S&P 500 · Pánico (A)",
+     "Bordiet S&P: Año de PÁNICO — considerar reducir exposición")
+alertcondition(first_of_yr and sp_B, "S&P 500 · Boom (B)",
+     "Bordiet S&P: Año de BOOM — considerar vender acciones")
+alertcondition(first_of_yr and sp_C, "S&P 500 · Piso (C)",
+     "Bordiet S&P: Año de PISO — momento de COMPRAR")
+alertcondition(first_of_yr and mv_A, "Merval · Pánico (A)",
+     "Bordiet Merval: Año de PÁNICO — considerar reducir exposición")
+alertcondition(first_of_yr and mv_B, "Merval · Boom (B)",
+     "Bordiet Merval: Año de BOOM — considerar vender acciones")
+alertcondition(first_of_yr and mv_C, "Merval · Piso (C)",
+     "Bordiet Merval: Año de PISO — momento de COMPRAR")
